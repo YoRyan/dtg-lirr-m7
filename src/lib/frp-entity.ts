@@ -12,6 +12,10 @@ export class FrpEntity {
      * Convenient access to the methods for a scripted entity.
      */
     public e = new rw.ScriptedEntity("");
+    /**
+     * Convenient access to the methods for a rendered entity.
+     */
+    public re = new rw.RenderedEntity("");
 
     private updateSource = new FrpSource<number>();
 

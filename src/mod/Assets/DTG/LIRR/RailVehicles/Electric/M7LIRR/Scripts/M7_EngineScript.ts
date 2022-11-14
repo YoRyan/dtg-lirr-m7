@@ -9,6 +9,7 @@ import * as dest from "lib/destinations";
 import * as frp from "lib/frp";
 import { FrpEngine } from "lib/frp-engine";
 import { PlayerUpdate, SensedDirection, VehicleCamera } from "lib/frp-vehicle";
+import * as fx from "lib/special-fx";
 import * as m from "lib/math";
 import * as rw from "lib/railworks";
 import * as xt from "lib/frp-extra";
@@ -1063,16 +1064,17 @@ const me = new FrpEngine(() => {
     });
 
     // Pantograph gate
+    const pantoGateAnim = new fx.Animation(me, "ribbons", 1);
     const pantoGate$ = frp.compose(
         me.createPlayerUpdateStream(),
         frp.merge(me.createAiUpdateStream()),
         frp.map(u => {
             const [frontCoupled] = u.couplings;
-            return frontCoupled ? u.dt : -u.dt;
+            return frontCoupled;
         })
     );
-    pantoGate$(dt => {
-        me.rv.AddTime("ribbons", dt);
+    pantoGate$(coupled => {
+        pantoGateAnim.setTargetPosition(coupled ? 1 : 0);
     });
 
     // Cab dome light
