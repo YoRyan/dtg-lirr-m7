@@ -8,10 +8,10 @@ import * as c from "lib/constants";
 import * as dest from "lib/destinations";
 import * as frp from "lib/frp";
 import { FrpEngine } from "lib/frp-engine";
-import { fsm, mapBehavior, rejectUndefined } from "lib/frp-extra";
 import { PlayerUpdate, SensedDirection, VehicleCamera } from "lib/frp-vehicle";
 import * as m from "lib/math";
 import * as rw from "lib/railworks";
+import * as xt from "lib/frp-extra";
 
 enum ControlEvent {
     Autostart,
@@ -197,7 +197,7 @@ const me = new FrpEngine(() => {
                     return undefined;
             }
         }),
-        rejectUndefined(),
+        xt.rejectUndefined(),
         frp.hub()
     );
     const rwReverser$ = frp.compose(
@@ -216,7 +216,7 @@ const me = new FrpEngine(() => {
                     return undefined;
             }
         }),
-        rejectUndefined(),
+        xt.rejectUndefined(),
         frp.hub()
     );
     const rwMasterKey$ = frp.compose(
@@ -235,7 +235,7 @@ const me = new FrpEngine(() => {
                     return undefined;
             }
         }),
-        rejectUndefined(),
+        xt.rejectUndefined(),
         frp.hub()
     );
     rwMasterController$(cv => {
@@ -308,7 +308,7 @@ const me = new FrpEngine(() => {
     const cabSignalFromMessage$ = frp.compose(
         me.createOnSignalMessageStream(),
         frp.map(msg => cs.toPulseCode(msg)),
-        rejectUndefined(),
+        xt.rejectUndefined(),
         frp.map(pc => cs.toLirrAspect(pc))
     );
     const cabSignalFromMessage = frp.stepper(cabSignalFromMessage$, undefined);
@@ -321,7 +321,7 @@ const me = new FrpEngine(() => {
             () => me.rv.GetControlValue("LirrAspect", 0) as cs.LirrAspect
         ),
         // It's important that our events only signal actual code changes.
-        fsm<undefined | cs.LirrAspect>(undefined),
+        xt.fsm<undefined | cs.LirrAspect>(undefined),
         frp.filter(([from, to]) => from !== to),
         frp.map(([, to]) => to as cs.LirrAspect),
         frp.hub()
@@ -362,7 +362,7 @@ const me = new FrpEngine(() => {
             { current: undefined, next: undefined }
         ),
         frp.map(accum => accum.current),
-        rejectUndefined()
+        xt.rejectUndefined()
     );
     const saveCabSignal$ = frp.compose(
         cabSignal$,
@@ -370,7 +370,7 @@ const me = new FrpEngine(() => {
     );
     const setSignalSpeed$ = frp.compose(
         me.createPlayerWithKeyUpdateStream(),
-        mapBehavior(
+        xt.mapBehavior(
             frp.liftN(
                 (aspect, hasPower) =>
                     hasPower && aspect !== undefined
@@ -417,13 +417,13 @@ const me = new FrpEngine(() => {
     );
     const aleInputCancelsPenalty$ = frp.compose(
         masterController$,
-        fsm<MasterController>(ControllerRegion.Coast),
+        xt.fsm<MasterController>(ControllerRegion.Coast),
         frp.filter(([from, to]) => from !== to && (from === ControllerRegion.Coast || to === ControllerRegion.Coast)),
         frp.map(_ => ale.AlerterInput.ActivityThatCancelsPenalty)
     );
     const aleInput$ = frp.compose(
         me.createPlayerWithKeyUpdateStream(),
-        mapBehavior(aleActivity),
+        xt.mapBehavior(aleActivity),
         frp.filter(v => v),
         frp.map(_ => ale.AlerterInput.Activity),
         frp.merge(aleInputCancelsPenalty$)
@@ -440,7 +440,7 @@ const me = new FrpEngine(() => {
     const ascCutIn = createCutInBehavior(me, "ATCCutIn", 0);
     const ascStatus$ = frp.compose(
         me.createPlayerWithKeyUpdateStream(),
-        mapBehavior(
+        xt.mapBehavior(
             frp.liftN(
                 (cutIn, hasPower) => {
                     if (hasPower) {
@@ -475,7 +475,7 @@ const me = new FrpEngine(() => {
     const acsesState = frp.stepper(acses$, undefined);
     const acsesStatus$ = frp.compose(
         me.createPlayerWithKeyUpdateStream(),
-        mapBehavior(
+        xt.mapBehavior(
             frp.liftN(
                 (cutIn, hasPower, state) => {
                     if (hasPower) {
@@ -496,7 +496,7 @@ const me = new FrpEngine(() => {
     );
     const acsesBeep$ = frp.compose(
         acses$,
-        fsm<undefined | acses.AcsesState>(undefined),
+        xt.fsm<undefined | acses.AcsesState>(undefined),
         frp.filter(([from, to]) => {
             if (from === undefined || to === undefined) {
                 return false;
@@ -586,7 +586,7 @@ const me = new FrpEngine(() => {
     // Set the common penalty brake indicator.
     const isAnyPenalty$ = frp.compose(
         me.createPlayerWithKeyUpdateStream(),
-        mapBehavior(
+        xt.mapBehavior(
             frp.liftN(
                 (aleState, ascState, acsesState) => {
                     switch (aleState?.brakes) {
@@ -623,7 +623,7 @@ const me = new FrpEngine(() => {
     // Show the exclamation symbol on the HUD for any audible alarm.
     const isAnyAlarm$ = frp.compose(
         me.createPlayerWithKeyUpdateStream(),
-        mapBehavior(
+        xt.mapBehavior(
             frp.liftN(
                 (aleState, ascState, acsesState) => aleState?.alarm || ascState?.alarm || acsesState?.alarm,
                 aleState,
@@ -698,7 +698,7 @@ const me = new FrpEngine(() => {
     );
     const brakeCommandAndEvents$ = frp.compose(
         me.createPlayerWithKeyUpdateStream(),
-        mapBehavior(brakeCommand),
+        xt.mapBehavior(brakeCommand),
         frp.merge(emergencyBrakeEvent$),
         frp.merge(autostartBrakeEvent$),
         frp.merge(chargeBrakes$),
@@ -746,7 +746,7 @@ const me = new FrpEngine(() => {
         brakeCommand,
         emergencyBrake
     );
-    const throttle$ = frp.compose(me.createPlayerWithKeyUpdateStream(), mapBehavior(throttleCommand));
+    const throttle$ = frp.compose(me.createPlayerWithKeyUpdateStream(), xt.mapBehavior(throttleCommand));
     // The physics value of the reverser should be one of three values.
     const reverser$ = frp.compose(
         userReverser$,
@@ -848,7 +848,7 @@ const me = new FrpEngine(() => {
     const startupState$ = frp.compose(
         airBrake$,
         frp.map(applied => applied <= airBrakeChargeThreshold),
-        fsm(false)
+        xt.fsm(false)
     );
     startupState$(([from, to]) => {
         if (!from && to) {
@@ -862,7 +862,7 @@ const me = new FrpEngine(() => {
     });
 
     // Operating display indicators
-    const nMultipleUnits$ = frp.compose(me.createPlayerWithKeyUpdateStream(), mapBehavior(nMultipleUnits));
+    const nMultipleUnits$ = frp.compose(me.createPlayerWithKeyUpdateStream(), xt.mapBehavior(nMultipleUnits));
     nMultipleUnits$(n => {
         me.rv.SetControlValue("Cars", 0, n);
     });
@@ -949,7 +949,12 @@ const me = new FrpEngine(() => {
         me.createPlayerWithoutKeyUpdateStream(),
         frp.map(_ => HeadLight.Off)
     );
-    const headlights$ = frp.compose(aiHeadlights$, frp.merge(leadHeadlights$), frp.merge(helperHeadlights$));
+    const headlights$ = frp.compose(
+        aiHeadlights$,
+        frp.merge(leadHeadlights$),
+        frp.merge(helperHeadlights$),
+        xt.rejectRepeats()
+    );
     headlights$(setting => {
         for (const light of dimLights) {
             light.Activate(setting === HeadLight.Dim);
@@ -989,58 +994,72 @@ const me = new FrpEngine(() => {
             return !frontCoupled;
         })
     );
-    const markers$ = frp.compose(aiMarkers$, frp.merge(leadMarkers$), frp.merge(helperMarkers$));
+    const markers$ = frp.compose(aiMarkers$, frp.merge(leadMarkers$), frp.merge(helperMarkers$), xt.rejectRepeats());
     markers$(setting => {
         for (const light of markerLights) {
             light.Activate(setting);
         }
     });
 
-    // Doors open status indicator and hallway lights
+    // Door hallway lights
     const hallLights = [new rw.Light("HallLight_001"), new rw.Light("HallLight_002")];
-    const aiIsStopped$ = frp.compose(
+    const hallLightsPlayer$ = frp.compose(
+        me.createPlayerUpdateStream(),
+        frp.map(pu => {
+            const [l, r] = pu.doorsOpen;
+            return l || r;
+        })
+    );
+    const hallLights$ = frp.compose(
         me.createAiUpdateStream(),
-        frp.map(au => au.isStopped)
+        frp.map(_ => false),
+        frp.merge(hallLightsPlayer$),
+        xt.rejectRepeats()
     );
-    const playerAnyDoorOpen$ = frp.compose(
-        me.createPlayerUpdateStream(),
-        frp.map(pu => {
-            const [left, right] = pu.doorsOpen;
-            return left || right;
-        })
-    );
-    const playerLeftDoorOpen$ = frp.compose(
-        me.createPlayerUpdateStream(),
-        frp.map(pu => {
-            const [left] = pu.doorsOpen;
-            return left;
-        })
-    );
-    const playerRightDoorOpen$ = frp.compose(
-        me.createPlayerUpdateStream(),
-        frp.map(pu => {
-            const [, right] = pu.doorsOpen;
-            return right;
-        })
-    );
-    aiIsStopped$(stopped => {
-        me.rv.ActivateNode("SL_doors_L", stopped);
-        me.rv.ActivateNode("SL_doors_R", stopped);
+    hallLights$(on => {
         for (const light of hallLights) {
-            light.Activate(false);
+            light.Activate(on);
         }
     });
+
+    // Door status lights
+    const doorLightsPlayer$ = frp.compose(
+        me.createPlayerUpdateStream(),
+        frp.map((pu): [boolean, boolean] => pu.doorsOpen)
+    );
+    const doorLights$ = frp.compose(
+        me.createAiUpdateStream(),
+        frp.map((au): [boolean, boolean] => [au.isStopped, au.isStopped]),
+        frp.merge(doorLightsPlayer$),
+        frp.hub()
+    );
+    const doorLightLeft$ = frp.compose(
+        doorLights$,
+        frp.map(([l]) => l),
+        xt.rejectRepeats()
+    );
+    const doorLightRight$ = frp.compose(
+        doorLights$,
+        frp.map(([, r]) => r),
+        xt.rejectRepeats()
+    );
+    doorLightLeft$(on => {
+        me.rv.ActivateNode("SL_doors_L", on);
+    });
+    doorLightRight$(on => {
+        me.rv.ActivateNode("SL_doors_R", on);
+    });
+
+    // Doors open status indicator
+    const playerAnyDoorOpen$ = frp.compose(
+        me.createPlayerWithKeyUpdateStream(),
+        frp.map(pu => {
+            const [l, r] = pu.doorsOpen;
+            return l || r;
+        })
+    );
     playerAnyDoorOpen$(open => {
         me.rv.SetControlValue("DoorsState", 0, open ? 1 : 0);
-        for (const light of hallLights) {
-            light.Activate(open);
-        }
-    });
-    playerLeftDoorOpen$(open => {
-        me.rv.ActivateNode("SL_doors_L", open);
-    });
-    playerRightDoorOpen$(open => {
-        me.rv.ActivateNode("SL_doors_R", open);
     });
 
     // Pantograph gate
@@ -1068,29 +1087,9 @@ const me = new FrpEngine(() => {
         me.mapGetCvStream("Cablight", 0),
         frp.map(v => v > 0.5)
     );
-    const cabLightOn$ = frp.compose(noCabLight$, frp.merge(playerCabLight$));
+    const cabLightOn$ = frp.compose(noCabLight$, frp.merge(playerCabLight$), xt.rejectRepeats());
     cabLightOn$(on => {
         cabLight.Activate(on);
-    });
-
-    // Passenger cabin lights for outside views
-    let exteriorPassLights: rw.Light[] = [];
-    for (let i = 1; i <= 9; i++) {
-        exteriorPassLights.push(new rw.Light(`RoomLight_0${i}`));
-    }
-    const aiExteriorPassLights$ = frp.compose(
-        me.createAiUpdateStream(),
-        frp.map(_ => false)
-    );
-    const playerExteriorPassLights$ = frp.compose(
-        me.createPlayerUpdateStream(),
-        frp.map(_ => true)
-    );
-    const exteriorPassLightsOn$ = frp.compose(aiExteriorPassLights$, frp.merge(playerExteriorPassLights$));
-    exteriorPassLightsOn$(on => {
-        for (const light of exteriorPassLights) {
-            light.Activate(on);
-        }
     });
 
     // Passenger cabin lights for the passenger view
@@ -1106,11 +1105,36 @@ const me = new FrpEngine(() => {
     );
     const playerInteriorPassLight$ = frp.compose(
         me.createPlayerWithKeyUpdateStream(),
-        mapBehavior(frp.stepper(isPassView$, false))
+        xt.mapBehavior(frp.stepper(isPassView$, false))
     );
-    const interiorPassLightOn$ = frp.compose(noInteriorPassLight$, frp.merge(playerInteriorPassLight$));
+    const interiorPassLightOn$ = frp.compose(
+        noInteriorPassLight$,
+        frp.merge(playerInteriorPassLight$),
+        xt.rejectRepeats()
+    );
     interiorPassLightOn$(on => {
         interiorPassLight.Activate(on);
+    });
+
+    // Passenger cabin lights for the exterior view
+    const exteriorPassLights: rw.Light[] = [];
+    for (let i = 1; i <= 9; i++) {
+        exteriorPassLights.push(new rw.Light(`RoomLight_0${i}`));
+    }
+    const exteriorPassLightAi$ = frp.compose(
+        me.createAiUpdateStream(),
+        frp.map(au => au.direction !== SensedDirection.None)
+    );
+    const exteriorPassLightOn$ = frp.compose(
+        me.createPlayerUpdateStream(),
+        frp.map(_ => true),
+        frp.merge(exteriorPassLightAi$),
+        xt.rejectRepeats()
+    );
+    exteriorPassLightOn$(on => {
+        for (const light of exteriorPassLights) {
+            light.Activate(on);
+        }
     });
 
     // Brake cylinder status lights
@@ -1139,7 +1163,7 @@ const me = new FrpEngine(() => {
             }
         })
     );
-    const brakeLight$ = frp.compose(aiBrakeLight$, frp.merge(playerBrakeLight$));
+    const brakeLight$ = frp.compose(aiBrakeLight$, frp.merge(playerBrakeLight$), xt.rejectRepeats());
     brakeLight$(status => {
         me.rv.ActivateNode("SL_green", status === BrakeLight.Green);
         me.rv.ActivateNode("SL_yellow", status === BrakeLight.Amber);
@@ -1230,7 +1254,8 @@ const me = new FrpEngine(() => {
             } else {
                 return 0;
             }
-        })
+        }),
+        xt.rejectRepeats()
     );
     wiperPosition$(pos => {
         me.rv.SetTime("ext_wipers", pos);
@@ -1306,7 +1331,8 @@ const me = new FrpEngine(() => {
     const passengers = new rw.RenderedEntity("Passengers");
     const showPassengers$ = frp.compose(
         me.createUpdateStream(),
-        frp.map(_ => string.sub(me.rv.GetRVNumber(), 1, 1) !== "z")
+        frp.map(_ => string.sub(me.rv.GetRVNumber(), 1, 1) !== "z"),
+        xt.rejectRepeats()
     );
     showPassengers$(show => {
         passengers.ActivateNode("all", show);
@@ -1337,7 +1363,7 @@ const me = new FrpEngine(() => {
         frp.merge(me.createPlayerWithoutKeyUpdateStream()),
         frp.map(_ => false)
     );
-    const enableControlSounds$ = frp.compose(isSetupInsideCab$, frp.merge(isNotSetup$));
+    const enableControlSounds$ = frp.compose(isSetupInsideCab$, frp.merge(isNotSetup$), xt.rejectRepeats());
     enableControlSounds$(on => {
         me.rv.SetControlValue("IsPlayerControl", 0, on ? 1 : 0);
     });
@@ -1358,8 +1384,10 @@ const me = new FrpEngine(() => {
     // The default AbsoluteSpeed controller for sounds isn't entirely reliable,
     // so replace it with our own.
     const speedForSounds$ = frp.compose(
-        me.createUpdateStream(),
-        frp.map(_ => Math.abs(me.rv.GetSpeed()))
+        me.createAiUpdateStream(),
+        frp.merge(me.createPlayerUpdateStream()),
+        frp.map(u => Math.abs(u.speedMps)),
+        xt.rejectRepeats()
     );
     speedForSounds$(v => me.rv.SetControlValue("AbsoluteSpeed", 0, v));
 
