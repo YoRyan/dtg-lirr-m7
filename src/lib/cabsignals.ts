@@ -1,4 +1,3 @@
-/** @noSelfInFile */
 import * as c from "./constants";
 
 /**

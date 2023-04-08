@@ -1,5 +1,3 @@
-/** @noSelfInFile */
-
 import * as acses from "lib/acses";
 import * as ale from "lib/alerter";
 import * as asc from "lib/asc";
@@ -8,7 +6,7 @@ import * as c from "lib/constants";
 import * as dest from "lib/destinations";
 import * as frp from "lib/frp";
 import { FrpEngine } from "lib/frp-engine";
-import { PlayerUpdate, SensedDirection, VehicleCamera } from "lib/frp-vehicle";
+import { SensedDirection, VehicleCamera, VehicleUpdate } from "lib/frp-vehicle";
 import * as fx from "lib/special-fx";
 import * as m from "lib/math";
 import * as rw from "lib/railworks";
@@ -129,6 +127,7 @@ const me = new FrpEngine(() => {
     const interlockState$ = frp.compose(
         me.createOnCvChangeStream(),
         frp.merge(autostartEvent$),
+        frp.merge(emergencyPullCordEvent$),
         me.foldAfterSettled(
             (accum, input) => {
                 switch (input) {
@@ -524,7 +523,7 @@ const me = new FrpEngine(() => {
     );
     const acsesOverspeed$ = frp.compose(
         me.createPlayerWithKeyUpdateStream(),
-        frp.fold<Overspeed, PlayerUpdate>((accum, pu) => {
+        frp.fold<Overspeed, VehicleUpdate>((accum, vu) => {
             const state = frp.snapshot(acsesState);
             let mode;
             if (state?.overspeed) {
@@ -539,7 +538,7 @@ const me = new FrpEngine(() => {
                 return [mode, 0];
             } else {
                 const [, timerS] = accum;
-                return [mode, timerS + pu.dt];
+                return [mode, timerS + vu.dt];
             }
         }, OverspeedMode.None)
     );
@@ -783,13 +782,13 @@ const me = new FrpEngine(() => {
     const dynamicBrake$ = frp.compose(
         me.createPlayerWithKeyUpdateStream(),
         // Simulate a lag time for the dynamics to ramp up and down.
-        frp.fold<number, PlayerUpdate>((accum, pu) => {
+        frp.fold<number, VehicleUpdate>((accum, vu) => {
             const target = frp.snapshot(dynamicBrakeCommand);
             const maxChangePerS = 0.25;
             if (target < accum) {
-                return Math.max(accum - maxChangePerS * pu.dt, target);
+                return Math.max(accum - maxChangePerS * vu.dt, target);
             } else if (target > accum) {
-                return Math.min(accum + maxChangePerS * pu.dt, target);
+                return Math.min(accum + maxChangePerS * vu.dt, target);
             } else {
                 return target;
             }
@@ -1394,7 +1393,7 @@ const me = new FrpEngine(() => {
     speedForSounds$(v => me.rv.SetControlValue("AbsoluteSpeed", 0, v));
 
     // Enable updates.
-    me.activateUpdatesEveryFrame(true);
+    me.e.BeginUpdate();
 });
 me.setup();
 

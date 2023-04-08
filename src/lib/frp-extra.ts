@@ -1,7 +1,7 @@
-/** @noSelfInFile */
-
 import * as frp from "./frp";
 import * as rw from "./railworks";
+
+type PrimitiveTypes = number | boolean | string | undefined | null;
 
 /**
  * Continously display the value of an event stream to aid in FRP debugging.
@@ -32,7 +32,7 @@ export function fsm<T>(initState: T): (eventStream: frp.Stream<T>) => frp.Stream
 /**
  * Filters out successive values in an event stream.
  */
-export function rejectRepeats<T>(): (eventStream: frp.Stream<T>) => frp.Stream<T> {
+export function rejectRepeats<T extends PrimitiveTypes>(): (eventStream: frp.Stream<T>) => frp.Stream<T> {
     return eventStream => next => {
         let started = false;
         let last: T | undefined = undefined;
@@ -53,6 +53,51 @@ export function rejectUndefined<T>(): (eventStream: frp.Stream<T | undefined>) =
     return frp.reject<T | undefined>(value => value === undefined) as (
         eventStream: frp.Stream<T | undefined>
     ) => frp.Stream<T>;
+}
+
+/**
+ * Discards an event stream once it has emitted one event.
+ */
+export function once<T>(): (eventStream: frp.Stream<T>) => frp.Stream<T> {
+    enum State {
+        Wait,
+        Emit,
+        Discard,
+    }
+    type Accum = State.Wait | [state: State.Emit, event: T] | State.Discard;
+    return eventStream =>
+        frp.compose(
+            eventStream,
+            frp.fold<Accum, T>((accum, evt) => (accum === State.Wait ? [State.Emit, evt] : State.Discard), State.Wait),
+            frp.filter(accum => accum !== State.Wait && accum !== State.Discard),
+            frp.map(accum => {
+                const [, evt] = accum as [State.Emit, T];
+                return evt;
+            })
+        );
+}
+
+/**
+ * Merges event stream A into event stream B only if B has not yet produced any
+ * events.
+ */
+export function mergeBeforeStart<A, B>(
+    eventStreamA: frp.Stream<A>
+): (eventStreamB: frp.Stream<B>) => frp.Stream<A | B> {
+    return eventStreamB => {
+        return next => {
+            let started = false;
+            eventStreamA(value => {
+                if (!started) {
+                    next(value);
+                }
+            });
+            eventStreamB(value => {
+                started = true;
+                next(value);
+            });
+        };
+    };
 }
 
 /**

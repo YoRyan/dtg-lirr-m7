@@ -1,4 +1,3 @@
-/** @noSelfInFile */
 /**
  * Advanced Civil Speed Enforcement System for the Long Island Rail Road.
  */
@@ -8,7 +7,7 @@ import * as c from "./constants";
 import * as frp from "./frp";
 import { FrpEngine } from "./frp-engine";
 import { fsm, mapBehavior, rejectUndefined } from "./frp-extra";
-import { PlayerUpdate } from "./frp-vehicle";
+import { VehicleUpdate } from "./frp-vehicle";
 import * as rw from "./railworks";
 
 export type AcsesState = { brakes: AcsesBrake; alarm: boolean; overspeed: boolean; trackSpeed: AcsesTrack };
@@ -333,14 +332,14 @@ export function create(
  * @param e The rail vehicle to sense objects with.
  * @returns The new event stream of speed post readings.
  */
-function mapSpeedPostsStream(e: FrpEngine): (eventStream: frp.Stream<PlayerUpdate>) => frp.Stream<Reading<SpeedPost>> {
+function mapSpeedPostsStream(e: FrpEngine): (eventStream: frp.Stream<VehicleUpdate>) => frp.Stream<Reading<SpeedPost>> {
     const nLimits = 3;
     return eventStream => {
         return frp.compose(
             eventStream,
-            frp.map(pu => {
+            frp.map(vu => {
                 const speedMpS = e.rv.GetSpeed(); // Must be as precise as possible.
-                const traveledM = speedMpS * pu.dt;
+                const traveledM = speedMpS * vu.dt;
                 let posts: Sensed<SpeedPost>[] = [];
                 for (const [distanceM, post] of iterateSpeedLimitsBackward(e, nLimits)) {
                     if (post.speedMps < hugeSpeed) {
@@ -393,14 +392,14 @@ function iterateSpeedLimits(
  * @param e The rail vehicle to sense objects with.
  * @returns The new event stream of signal readings.
  */
-function mapSignalStream(e: FrpEngine): (eventStream: frp.Stream<PlayerUpdate>) => frp.Stream<Reading<Signal>> {
+function mapSignalStream(e: FrpEngine): (eventStream: frp.Stream<VehicleUpdate>) => frp.Stream<Reading<Signal>> {
     const nSignals = 3;
     return eventStream => {
         return frp.compose(
             eventStream,
-            frp.map(pu => {
+            frp.map(vu => {
                 const speedMpS = e.rv.GetSpeed(); // Must be as precise as possible.
-                const traveledM = speedMpS * pu.dt;
+                const traveledM = speedMpS * vu.dt;
                 let signals: Sensed<Signal>[] = [];
                 for (const [distanceM, signal] of iterateSignalsBackward(e, nSignals)) {
                     signals.push([-distanceM, signal]);
@@ -515,7 +514,7 @@ function createTrackSpeedStream(
             // crossovers, impose a distance-based delay before upgrading the
             // track speed.
             frp.merge(e.createPlayerWithKeyUpdateStream()),
-            frp.fold<TrackSpeedChangeAccum, number | PlayerUpdate>((accum, input) => {
+            frp.fold<TrackSpeedChangeAccum, number | VehicleUpdate>((accum, input) => {
                 if (frp.snapshot(reset)) {
                     return undefined;
                 }

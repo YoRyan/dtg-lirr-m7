@@ -1,5 +1,3 @@
-/** @noSelfInFile */
-
 import * as c from "./constants";
 import * as frp from "./frp";
 import { FrpEntity, FrpSource } from "./frp-entity";
@@ -13,20 +11,13 @@ export type VehicleCouplings = [front: boolean, rear: boolean];
 
 export type VehicleDoors = [left: boolean, right: boolean];
 
-export type PlayerUpdate = {
-    dt: number;
-    speedMps: number;
-    isStopped: boolean;
-    couplings: VehicleCouplings;
-    doorsOpen: VehicleDoors;
-};
-
-export type AiUpdate = {
+export type VehicleUpdate = {
     dt: number;
     speedMps: number;
     isStopped: boolean;
     direction: SensedDirection;
     couplings: VehicleCouplings;
+    doorsOpen: VehicleDoors;
 };
 
 export enum SensedDirection {
@@ -78,19 +69,19 @@ export class FrpVehicle extends FrpEntity {
     /**
      * Convenient access to the methods for a rail vehicle.
      */
-    public rv = new rw.RailVehicle("");
+    public readonly rv = new rw.RailVehicle("");
     /**
      * A behavior that returns true if the controls have settled after initial
      * startup.
      */
-    public areControlsSettled: frp.Behavior<boolean> = () =>
+    public readonly areControlsSettled: frp.Behavior<boolean> = () =>
         this.initTimeS === undefined ? false : this.e.GetSimulationTime() > this.initTimeS + 0.5;
 
-    private playerUpdateSource = new FrpSource<PlayerUpdate>();
-    private aiUpdateSource = new FrpSource<AiUpdate>();
-    private cvChangeSource = new FrpSource<ControlValueChange>();
-    private consistMessageSource = new FrpSource<ConsistMessage>();
-    private vehicleCameraSource = new FrpSource<VehicleCamera>();
+    private readonly playerUpdateSource = new FrpSource<VehicleUpdate>();
+    private readonly aiUpdateSource = new FrpSource<VehicleUpdate>();
+    private readonly cvChangeSource = new FrpSource<ControlValueChange>();
+    private readonly consistMessageSource = new FrpSource<ConsistMessage>();
+    private readonly vehicleCameraSource = new FrpSource<VehicleCamera>();
 
     private initTimeS: number | undefined = undefined;
     private direction = SensedDirection.None;
@@ -145,17 +136,18 @@ export class FrpVehicle extends FrpEntity {
                 this.direction = SensedDirection.Backward;
             }
 
-            if (isPlayer) {
-                // Door status
-                const doorsOpen = [
-                    (this.rv.GetControlValue("DoorsOpenCloseLeft", 0) ?? 0) > 0.5,
-                    (this.rv.GetControlValue("DoorsOpenCloseRight", 0) ?? 0) > 0.5,
-                ] as VehicleDoors;
+            // Door status
+            const doorsOpen = [
+                (this.rv.GetControlValue("DoorsOpenCloseLeft", 0) ?? 0) > 0.5,
+                (this.rv.GetControlValue("DoorsOpenCloseRight", 0) ?? 0) > 0.5,
+            ] as VehicleDoors;
 
+            if (isPlayer) {
                 this.playerUpdateSource.call({
                     dt,
                     speedMps,
                     isStopped,
+                    direction: this.direction,
                     couplings,
                     doorsOpen,
                 });
@@ -172,28 +164,63 @@ export class FrpVehicle extends FrpEntity {
                         isStopped,
                         direction: this.direction,
                         couplings,
+                        doorsOpen,
                     });
                 }
             }
         });
     }
 
+    /**
+     * Create an event stream of some useful vehicle state that fires each
+     * update.
+     */
+    createVehicleUpdateStream() {
+        return frp.compose(this.createPlayerUpdateStream(), frp.merge(this.createAiUpdateStream()));
+    }
+
+    /**
+     * Create an event stream that fires while the current rail vehicle is being
+     * controlled by the player, either as an engine, helper, or wagon.
+     * @returns The new stream, which contains some useful vehicle state.
+     */
     createPlayerUpdateStream() {
         return this.playerUpdateSource.createStream();
     }
 
+    /**
+     * Create an event stream that fires while the current rail vehicle is
+     * under the control of the simulation, as opposed to the player.
+     * @returns The new stream, which contains some useful vehicle state.
+     */
     createAiUpdateStream() {
         return this.aiUpdateSource.createStream();
     }
 
+    /**
+     * Create an event stream from the OnControlValueChange() callback, which
+     * fires when the player manipulates any control value.
+     * @returns The new stream of control value change events.
+     */
     createOnCvChangeStream() {
         return this.cvChangeSource.createStream();
     }
 
+    /**
+     * Create an event stream from the OnConsistMessage() callback, which fires
+     * when a neighboring vehicle in a player train sends a message.
+     * @returns The new stream of consist messages.
+     */
     createOnConsistMessageStream() {
         return this.consistMessageSource.createStream();
     }
 
+    /**
+     * Create an event stream from the OnCameraEnter() and OnCameraLeave()
+     * callbacks, which fire when the player is controlling this vehicle and
+     * changes the current camera view.
+     * @returns The new stream of camera states.
+     */
     createOnCameraStream() {
         return this.vehicleCameraSource.createStream();
     }
@@ -208,10 +235,7 @@ export class FrpVehicle extends FrpEntity {
      * @param index The index of the controlvalue, usually 0.
      * @returns The new stream of numbers.
      */
-    mapGetCvStream(
-        name: string,
-        index: number
-    ): (eventStream: frp.Stream<PlayerUpdate | AiUpdate>) => frp.Stream<number> {
+    mapGetCvStream(name: string, index: number): (eventStream: frp.Stream<VehicleUpdate>) => frp.Stream<number> {
         return eventStream =>
             frp.compose(
                 eventStream,
@@ -262,19 +286,17 @@ export class FrpVehicle extends FrpEntity {
         step: (accumulated: TAccum, value: TValue) => TAccum,
         initial: frp.Behavior<TAccum>
     ): (eventStream: frp.Stream<TValue>) => frp.Stream<TAccum> {
-        return eventStream => {
-            return next => {
-                let accumulated = frp.snapshot(initial);
-                let firstRead = false;
-                eventStream(value => {
-                    if (frp.snapshot(this.areControlsSettled) && firstRead) {
-                        next((accumulated = step(accumulated, value)));
-                    } else {
-                        accumulated = frp.snapshot(initial);
-                        firstRead = true;
-                    }
-                });
-            };
+        return eventStream => next => {
+            let accumulated = frp.snapshot(initial);
+            let firstRead = false;
+            eventStream(value => {
+                if (frp.snapshot(this.areControlsSettled) && firstRead) {
+                    next((accumulated = step(accumulated, value)));
+                } else {
+                    accumulated = frp.snapshot(initial);
+                    firstRead = true;
+                }
+            });
         };
     }
 
@@ -287,8 +309,8 @@ export class FrpVehicle extends FrpEntity {
      * @returns A curried function that will produce the new event stream.
      */
     mapEventStreamTimer(durationS: number = 1): (eventStream: frp.Stream<any>) => frp.Stream<boolean> {
-        return eventStream => {
-            return frp.compose(
+        return eventStream =>
+            frp.compose(
                 eventStream,
                 frp.map(_ => undefined),
                 frp.merge(this.createPlayerUpdateStream()),
@@ -301,19 +323,18 @@ export class FrpVehicle extends FrpEntity {
                 }, 0),
                 frp.map(t => t > 0)
             );
-        };
     }
 
     setup() {
         super.setup();
 
-        OnControlValueChange = (name, index, value) => {
+        OnControlValueChange = this.chain(OnControlValueChange, (name, index, value) => {
             this.cvChangeSource.call([name, index, value]);
-        };
-        OnConsistMessage = (id, content, dir) => {
+        });
+        OnConsistMessage = this.chain(OnConsistMessage, (id, content, dir) => {
             this.consistMessageSource.call([id, content, dir]);
-        };
-        OnCameraEnter = (cabEnd, carriageCam) => {
+        });
+        OnCameraEnter = this.chain(OnCameraEnter, (cabEnd, carriageCam) => {
             let vc;
             if (carriageCam === rw.CameraEnterView.Cab) {
                 vc = cabEnd === rw.CameraEnterCabEnd.Rear ? VehicleCamera.RearCab : VehicleCamera.FrontCab;
@@ -321,9 +342,9 @@ export class FrpVehicle extends FrpEntity {
                 vc = VehicleCamera.Carriage;
             }
             this.vehicleCameraSource.call(vc);
-        };
-        OnCameraLeave = () => {
+        });
+        OnCameraLeave = this.chain(OnCameraLeave, () => {
             this.vehicleCameraSource.call(VehicleCamera.Outside);
-        };
+        });
     }
 }

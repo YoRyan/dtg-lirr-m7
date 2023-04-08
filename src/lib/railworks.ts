@@ -1,5 +1,3 @@
-/** @noSelfInFile */
-
 /**
  * A direction used by signals to send consist and signal messages.
  */
@@ -20,6 +18,11 @@ export enum CameraEnterView {
 }
 
 export type AllNodes = "all";
+
+export enum TextSet {
+    Primary = 0,
+    Secondary = 1,
+}
 
 /**
  * A direction used by rail vehicles to send consist messages and search for
@@ -174,13 +177,15 @@ export type JunctionAgainstOrEndOfTrack = -1;
  * can be invoked.
  */
 export class Entity {
-    private id: string = "";
+    private readonly id: string = "";
 
     constructor(id: string) {
         this.id = id;
     }
 
-    protected fn = (name: string) => (this.id === "" ? name : `${this.id}:${name}`);
+    protected fn(name: string) {
+        return this.id === "" ? name : `${this.id}:${name}`;
+    }
 }
 
 /**
@@ -283,6 +288,13 @@ export class RenderedEntity extends ScriptedEntity {
      */
     setNearPosition(x: number, y: number, z: number) {
         Call(this.fn("setNearPosition"), x, y, z);
+    }
+
+    /**
+     * Method to set the entity text to a given value.
+     */
+    SetText(text: string, set: TextSet) {
+        Call(this.fn("SetText"), text, set);
     }
 }
 
@@ -511,7 +523,7 @@ export class RailVehicle extends RenderedEntity {
      */
     ControlExists(name: string, index: number) {
         const [r] = Call(this.fn("ControlExists"), name, index);
-        return r as boolean;
+        return (r as number) === 1;
     }
 
     /**
@@ -535,6 +547,17 @@ export class RailVehicle extends RenderedEntity {
      */
     SetControlValue(name: string, index: number, value: number) {
         Call(this.fn("SetControlValue"), name, index, value);
+    }
+
+    /**
+     * Sets a target value for a control
+     * @param name name of the control
+     * @param index the index of the control (usually 0 unless there are
+     * multiple controls with the same name)
+     * @param value the value to set the control to
+     */
+    SetControlTargetValue(name: string, index: number, value: number) {
+        Call(this.fn("SetControlTargetValue"), name, index, value);
     }
 
     /**

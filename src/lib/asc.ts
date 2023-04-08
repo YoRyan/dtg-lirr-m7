@@ -1,4 +1,3 @@
-/** @noSelfInFile */
 /**
  * Automatic Speed Control for the Long Island Rail Road.
  *

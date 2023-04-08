@@ -1,4 +1,3 @@
-/** @noSelfInFile */
 /**
  * A control for the destination boards selected by the first character of the
  * rail vehicle number.

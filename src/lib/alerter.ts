@@ -1,4 +1,3 @@
-/** @noSelfInFile */
 /**
  * Alerter subsystem for the Long Island Rail Road.
  */
