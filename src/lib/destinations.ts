@@ -56,8 +56,11 @@ export function setup(v: FrpVehicle, destinations: Destination[], previous: frp.
     move$(([offset, selected]) => {
         // Show a popup with the selected destination and the ones adjacent to it.
         const lines: string[] = [];
+        if (offset > 0 || selected >= popupItems) {
+            lines.push("...");
+        }
+        const window = Math.floor((selected - offset) / popupItems);
         for (let i = 0; i < popupItems; i++) {
-            const window = Math.floor((selected - offset) / popupItems);
             const idx = window * popupItems + offset + i;
             if (idx >= nDest) {
                 break;
@@ -65,6 +68,9 @@ export function setup(v: FrpVehicle, destinations: Destination[], previous: frp.
                 const [, name] = destinations[idx];
                 lines.push(idx === selected ? `> ${name} <` : name);
             }
+        }
+        if (offset + (window + 1) * popupItems < destinations.length) {
+            lines.push("...");
         }
         rw.ScenarioManager.ShowInfoMessageExt(
             "Change Destination Boards",
